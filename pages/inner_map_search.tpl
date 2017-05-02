@@ -53,8 +53,8 @@
 								<label class="input-group-addon">Order By</label>
 								<select class="sort-type form-control" id="panel_sort_type">
 									<option value="0">Newst</option>
-									<option value="1">Price (Low -> High)</option>
 									<option value="2">Price (High -> Low)</option>
+									<option value="1">Price (Low -> High)</option>
 									<option value="3">Bedrooms</option>
 									<option value="4">Bathrooms</option>
 									<option value="5">Square Feet</option>
@@ -62,6 +62,7 @@
 								</select>
 							</div>
 						</div>
+						<div id="neibour_estates_nav"></div>
 						<div id="neibour_estates_wrapper"></div>
 					</div>
 				</div>
@@ -263,6 +264,41 @@
 				</div>
 			</div>
 
+			<div id="mnj_custom_fields_model" style="display: none;">
+				<div class="col col-xs-6">
+					<div class="input-group input-group-sm">
+						<span class="input-group-addon">Custom</span>
+						<select class="form-control mnj-search-custom-field">
+							<optgroup label="A Clark">
+							<?php foreach (MarkninjaEstate::$searchFields[0] as $key) { ?>
+								<option value="<?php echo $key; ?>"><?php echo $key; ?></option>
+							<?php } ?>
+							</optgroup>
+							<optgroup label="Las">
+							<?php foreach (MarkninjaEstate::$searchFields[1] as $key) { ?>
+								<option value="<?php echo $key; ?>"><?php echo $key; ?></option>
+							<?php } ?>
+							</optgroup>
+						</select>
+					</div>
+				</div>
+				<div class="col col-xs-2">
+					<select class="form-control mnj-search-custom-op">
+						<option value="=">Equal</option>
+						<option value="<>">NOT Equal</option>
+						<option value="null">NULL</option>
+						<option value="not-null">NOT NULL</option>
+						<option value="between">BETWEEN</option>
+						<option value="<"><</option>
+						<option value=">">></option>
+					</select>
+				</div>
+				<div class="col col-xs-4">
+					<input type="text" class="form-control mnj-search-custom-value1" />
+					<input type="text" class="form-control mnj-search-custom-value2" style="display: none;" />
+				</div>
+			</div>
+
 			<script>
 			  var home_url = "<?php echo home_url(); ?>";
 			  var mnj_search_rules = <?php echo Markninja_Helper::json_encode(MarkninjaEstate::$searchTypes); ?>;
@@ -298,4 +334,4 @@
 			</script>
 
 			<script src="https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/markerclusterer.js"></script>
-			<script async defer src="https://maps.googleapis.com/maps/api/js?key=<?php echo get_option('mnj_google_api_key');?>&callback=initMap"></script>
+			<script async defer src="https://maps.googleapis.com/maps/api/js?key=<?php echo get_option('mnj_google_api_key');?>&libraries=places&callback=initMap"></script>

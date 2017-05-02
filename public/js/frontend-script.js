@@ -48,9 +48,22 @@ var mnj_pack = {
 
 var mnj_map = {
   map: null,
-  detailGroupZoom: 12,
+  markers: [],
+  zoomInStep: 4,
+  detailGroupZoom: 18,
   detailZoom: 20,
   satelliteZoom: 18,
+
+  mapChangedUnderWatch: false,
+  mapChangedCount: 0,
+  mapChangedChecked: 0,
+  mapChangedChecker: null,
+
+  history: {
+    search: '',
+    bound: null,
+    mode: 1
+  },
 
   init_map: function() {
 
@@ -66,10 +79,10 @@ var mnj_map = {
 
     var lasvegas = {lat: 36.1699, lng: -115.1398};
     mnj_map.map = new google.maps.Map(document.getElementById('mnj_google_map'), {
-      zoom: 4,
+      zoom: 8,
       center: lasvegas,
       // disableDefaultUI: true
-      // mapTypeId: 'satellite'
+      mapTypeId: 'satellite'
     });
 
     mnj_map.map.addListener('center_changed', mnj_map.map_pos_changed);
@@ -77,17 +90,53 @@ var mnj_map = {
   },
 
   map_pos_changed: function() {
-    /*
-    if (mnj_map.map.getZoom() < mnj_map.satelliteZoom) {
-      mnj_map.map.setMapTypeId('roadmap');
+    if (!mnj_map.mapChangedUnderWatch) return;
+    mnj_map.mapChangedCount ++;
+    if (!mnj_map.mapChangedChecker) mnj_map.mapChangedChecker = setInterval(mnj_map.checkMapChange, 500);
+  },
+
+  checkMapChange: function() {
+    if (!mnj_map.mapChangedUnderWatch) return;
+
+    if ((mnj_map.mapChangedCount > 0) && (mnj_map.mapChangedCount == mnj_map.mapChangedChecked)) {
+      mnj_map.initCheckMapState();
+      mnj_map.service_search();
     } else {
-      mnj_map.map.setMapTypeId('satellite'); // terrain
+      mnj_map.mapChangedChecked = mnj_map.mapChangedCount;
     }
-    */
-    setTimeout(mnj_map.grab_ranged, 100);
+  },
+
+  initCheckMapState: function() {
+    mnj_map.mapChangedCount = 0;
+    mnj_map.mapChangedChecked = 0;
+    clearInterval(mnj_map.mapChangedChecker);
+    mnj_map.mapChangedChecker = null;
+  },
+
+  composeSearchQuery: function() {
+    var searchByForm = jQuery('#mng_map_search').serialize();
+    var customObjs = jQuery('#mnj_search_rules li[type=custom]');
+    var customRules = [];
+    for (var i=0; i<customObjs.length; i++) {
+      var obj = [];
+      obj.push(jQuery('.mnj-search-custom-field', customObjs[i]).val());
+      obj.push(jQuery('.mnj-search-custom-op', customObjs[i]).val());
+      obj.push(jQuery('.mnj-search-custom-value1', customObjs[i]).val());
+      obj.push(jQuery('.mnj-search-custom-value2', customObjs[i]).val());
+      customRules.push(obj);
+    }
+
+    if (customRules.length > 0) {
+      searchByForm += ((searchByForm=="")?"":"&") + "custom=" + encodeURIComponent(JSON.stringify(customRules));  
+    }
+    
+    return searchByForm;
   },
 
   service_search: function() {
+
+    mnj_map.mapChangedUnderWatch = false;
+
     if (!mnj_map.search_valid()) {
       if (jQuery('#mnj_search_panel_body').attr('aria-expanded') == "false") {
         jQuery('#mng_map_search .btn-modify-criteria').trigger('click');
@@ -101,34 +150,134 @@ var mnj_map = {
 
     var bound = mnj_map.map.getBounds();
     var rect = [
-      {lat: bound.getNorthEast().lat(), lng: .getNorthEast().lng()},
-      {lat: bound.getSouthWest().lat(), lng: .getSouthWest().lng()}
+      {lat: bound.getSouthWest().lat(), lng: bound.getSouthWest().lng()},
+      {lat: bound.getNorthEast().lat(), lng: bound.getNorthEast().lng()}
     ];
+    
+    var searchByForm = mnj_map.composeSearchQuery();
 
-    e.preventDefault();
+    ////////////////////////////////////////////////////
+    // check if really need to reload ...
+    //
+
+    // mnj_map.map.getProjection().fromLatLngToPoint(
+    //     mnj_map.map.getCenter()
+    // );
+
+    if (mnj_map.history.search == searchByForm) {
+      if (mnj_map.history.bound) {
+        if (mnj_map.history.bound.equals(bound)) return;
+        if (mnj_map.history.mode == '0') {
+          // let 's check if bound is containig...
+          var isContained = true;
+          if ( !mnj_map.history.bound.contains(bound.getSouthWest()) )  isContained = false;
+          if ( !mnj_map.history.bound.contains(bound.getNorthEast()) )  isContained = false;
+          
+          if (isContained) {
+            // only refresh the list
+            mnj_map.service_list(1);
+            return;
+          }
+        }
+      }
+    }
+    //
+
     jQuery('body').overlay();
+
+    mnj_map.history.search = searchByForm;
+    mnj_map.history.bound = bound;
 
     // Submit the form via ajax
     jQuery.ajax({
         url: ajaxurl + "?action=mnj_estate_retrieve",
         method:'GET',
-        data: jQuery(this).serialize() + "&" + jQuery.param({'rect': rect}),
+        data: searchByForm + "&" + jQuery.param({'rect': rect}) + "&order_type=" + jQuery('#neibour_estates #panel_sort_type').val(),
     }).done(function(data) {
         // alert(data.message);
         jQuery('body').completed();
+        mnj_map.mapChangedUnderWatch = true;
+
+        if (!data || data.error != '0') {
+          notify.error('Oops. Something went wrong. Please try again later.' + ((data&&data.msg)?('<br>' + data.msg):'') );
+          return;
+        }
+
+        mnj_map.history.mode = data.mode;
         mnj_map.handle_result(data);
-        mnj_map.grab_ranged();
+        mnj_map.render_list(data);
 
         // let 's check if parcel is mentioned as search key
         var search_parcel = jQuery('#mng_map_search').find('[name=parcel]').val();
-        if (mnj_parcels[search_parcel]) {
-          mnj_map.load_detail(search_parcel);
-        }
+        if (search_parcel)  mnj_map.load_detail(search_parcel);
+        
 
     }).fail(function() {
         // alert('There was a problem calling you - please try again later.');
         jQuery('body').completed();
-        notify.error('There was a problem calling you - please try again later.');
+        mnj_map.mapChangedUnderWatch = true;
+
+        notify.error('Oops. Something went wrong. Please try again later.');
+        mnj_map.mapChangedUnderWatch = true;
+    }).always(function() {
+        
+    });
+  },
+
+  service_list: function(page, limit) {
+
+    mnj_map.mapChangedUnderWatch = false;
+
+    if (!mnj_map.search_valid()) {
+      if (jQuery('#mnj_search_panel_body').attr('aria-expanded') == "false") {
+        jQuery('#mng_map_search .btn-modify-criteria').trigger('click');
+      }
+      return false;
+    }
+
+    if (jQuery('#mnj_search_panel_body').attr('aria-expanded') == "true") {
+      jQuery('#mng_map_search .btn-modify-criteria').trigger('click');
+    }
+
+    var bound = mnj_map.map.getBounds();
+    var rect = [
+    {lat: bound.getSouthWest().lat(), lng: bound.getSouthWest().lng()},
+      {lat: bound.getNorthEast().lat(), lng: bound.getNorthEast().lng()}
+    ];
+
+    jQuery('#neibour_estates').overlay({'position': 'absolute'});
+    
+    var searchByForm = jQuery('#mng_map_search').serialize();
+
+    /*
+    // on hold now...
+    if (mnj_map.history.search == searchByForm) {
+
+    } else {
+      mnj_map.history.search = searchByForm;
+    }
+    */
+
+    // Submit the form via ajax
+    jQuery.ajax({
+        url: ajaxurl + "?action=mnj_estate_list",
+        method:'GET',
+        data: searchByForm + "&" + jQuery.param({'rect': rect}) + "&page=" + page + "&order_type=" + jQuery('#neibour_estates #panel_sort_type').val(),
+    }).done(function(data) {
+        // alert(data.message);
+        jQuery('#neibour_estates').completed();
+        
+        if (!data || data.error != '0') {
+          notify.error('Oops. Something went wrong. Please try again later.' + ((data&&data.msg)?('<br>' + data.msg):'') );
+          return;
+        }
+
+        mnj_map.render_list(data);
+
+    }).fail(function() {
+        // alert('There was a problem calling you - please try again later.');
+        jQuery('#neibour_estates').completed();
+        notify.error('Oops. Something went wrong. Please try again later.');
     }).always(function() {
         
     });
@@ -145,11 +294,17 @@ var mnj_map = {
 
     jQuery('.mnj_search_rule_list').on('click', '.btn-add', function() {
       var typev = jQuery(this).closest('li').attr('type');
-      if (typev == '') return;
 
-      if (jQuery('#mnj_search_rules li[type=' + typev + ']').length > 0) {
-        jQuery('#mnj_search_rules li[type=' + typev + ']')/*.addClass('active')*/.find('input').eq(0).focus();
-        return;
+      if (['custom'].indexOf(typev) > -1) {
+        // should be able to type several conditions
+      } else {
+        // should NOT be able to type several conditions
+        if (typev == '') return;
+
+        if (jQuery('#mnj_search_rules li[type=' + typev + ']').length > 0) {
+          jQuery('#mnj_search_rules li[type=' + typev + ']')/*.addClass('active')*/.find('input').eq(0).focus();
+          return;
+        }
       }
 
       mnj_map.render_rule(typev);
@@ -189,6 +344,7 @@ var mnj_map = {
 
     var inner = '';
     var value = ['','','','','','','','',''];
+
     if (type == 'parcel') {
       var label = 'Parcel';
       value[2] = '1';
@@ -199,8 +355,19 @@ var mnj_map = {
       inner += '<div class="input-group input-group-sm"><span class="input-group-addon"><input type="checkbox" name="by_radius" ' + (value[1]?"checked":'') + '>By Neibour or Radius of </span><input class="form-control"  name="rad" placeholder="Radius" value="' + value[2] + '"><span class="input-group-addon">mile</span></div>';
     } else if (type == 'address') {
       var label = 'Address';
+      value[4] = '1';
       if(values && values['addr']) value[0] = values['addr'];
+      if(values && values['lat']) value[1] = values['lat'];
+      if(values && values['lng']) value[2] = values['lng'];
+      if(values && values['by_radius_addr']) value[3] = values['by_radius_addr'];
+      if(values && values['rad_addr']) value[4] = values['rad_addr'];
+
       inner = '<div class="input-group input-group-sm"><span class="input-group-addon">' + label + '</span><input class="form-control not-empty"  name="addr" placeholder="' + label + '" value="' + value[0] + '"></div>';
+      inner += '<div class="">';
+      inner += '<div class="input-group input-group-sm" style="display: none;"><span class="input-group-addon">Lat</span><input class="form-control not-empty"  name="lat" placeholder="Latitude" value="' + value[1] + '"></div>';
+      inner += '<div class="input-group input-group-sm" style="display: none;"><span class="input-group-addon">Lng</span><input class="form-control not-empty"  name="lng" placeholder="Longitude" value="' + value[2] + '"></div>';
+      inner += '<div class="input-group input-group-sm"><span class="input-group-addon"><input type="checkbox" name="by_radius_addr" ' + (value[3]?"checked":'') + '>By Radius of </span><input class="form-control"  name="rad_addr" placeholder="Radius" value="' + value[4] + '"><span class="input-group-addon">mile</span></div>';
+      inner += '</div>';
     } else if (type == 'status') {
       var label = 'Status';
       if(values && values['status']) value[0] = values['status'];
@@ -228,10 +395,20 @@ var mnj_map = {
       inner = '<div class="input-group input-group-sm"><span class="input-group-addon">Lat</span><input class="form-control not-empty"  name="lat" placeholder="Latitude" value="' + value[0] + '"></div>';
       inner += '<div class="input-group input-group-sm"><span class="input-group-addon">Lng</span><input class="form-control not-empty"  name="lng" placeholder="Longitude" value="' + value[1] + '"></div>';
       inner += '<div class="input-group input-group-sm"><span class="input-group-addon">Radius</span><input class="form-control not-empty"  name="radius" placeholder="Radius" value="' + value[2] + '"><span class="input-group-addon">mile</span></div>';
+    } else if (type == 'custom') {
+      inner = jQuery('#mnj_custom_fields_model').html();
     }
 
     $li.find('.title').html(inner);
     $li.appendTo(jQuery('#mnj_search_rules'));
+
+    if (type == 'address') {
+      var elemObj = $li.find('.title input[name=addr]').get(0);
+      var searchBox = new google.maps.places.SearchBox(elemObj);
+      searchBox.obj = elemObj;
+
+      google.maps.event.addListener(searchBox, 'places_changed', mnj_map.searchByAddr);
+    }
 
     mnj_map.after_rull_changed();
   },
@@ -245,7 +422,32 @@ var mnj_map = {
     jQuery('.mnj-search-panel .panel-heading h3').html(msg);
   },
   
+  searchByAddr: function() {
+    
+    var parentObj = jQuery(this.obj).closest('.title');
+    parentObj.find('input[name=lat]').val('');
+    parentObj.find('input[name=lng]').val('');
+
+    var places = this.getPlaces(), place;
+
+
+    if (!places || !places.length) {
+      // google.maps.event.trigger(fn.map.$addr, 'focus');
+      // google.maps.event.trigger(fn.map.$addr, 'keydown', {keyCode: 13});
+      return;
+    }
+
+    place = places[0];
+    if (place.formatted_address) {
+      parentObj.find('input[name=lat]').val(place.geometry.location.lat());
+      parentObj.find('input[name=lng]').val(place.geometry.location.lng());
+    }
+
+  },
+
   search_valid: function() {
+    return true;
+
     var is_valid = true;
     var search_rules = [];
     jQuery('#mnj_search_rules li').each(function(i, o){
@@ -276,8 +478,18 @@ var mnj_map = {
   },
 
   bind_events: function() {
+
     jQuery('#mng_map_search').submit(function(e){
+      e.preventDefault();
       mnj_map.service_search();
+    });
+
+    jQuery('#mng_map_search').on('keyup keypress', function(e) {
+      var keyCode = e.keyCode || e.which;
+      if (keyCode === 13) { 
+        e.preventDefault();
+        return false;
+      }
     });
 
     jQuery('body').on('click', '.property_block .btn-see-details', function(e) {
@@ -296,25 +508,55 @@ var mnj_map = {
         // using global variable:
         mnj_map.map.panTo(center);
         if (mnj_map.map.getZoom() < mnj_map.detailZoom) mnj_map.map.setZoom(mnj_map.detailZoom);
+
+        if (mnj_map_markers[parcel]) {
+          mnj_map_markers[parcel].setAnimation(google.maps.Animation.BOUNCE);
+        }
       }
     });
 
+    jQuery('body').on('click', '#neibour_estates_nav .nav-item a', function(e) {
+      if (jQuery(this).hasClass('disabled')) return;
+      mnj_map.service_list(jQuery(this).attr('data-page'));
+    });
+
     jQuery('#panel_sort_type').on('change', function(){
-      mnj_map.refresh_grabed();
+      mnj_map.service_list(jQuery('#neibour_estates_nav .nav-item.active a').attr('data-page'));
+    });
+
+    jQuery('body').on('change', '.mnj-search-custom-op', function(e){
+      var opt = jQuery(this).val();
+      if (opt == 'between') {
+        jQuery(this).closest('.title').find('.mnj-search-custom-value1').css('width', '50%');
+        jQuery(this).closest('.title').find('.mnj-search-custom-value2').css('width', '50%').show();
+      } else if ((opt == 'null') || (opt == 'not-null')) {
+        jQuery(this).closest('.title').find('.mnj-search-custom-value1').hide();
+        jQuery(this).closest('.title').find('.mnj-search-custom-value2').hide();
+      } else {
+        jQuery(this).closest('.title').find('.mnj-search-custom-value1').css('width', '100%').show();
+        jQuery(this).closest('.title').find('.mnj-search-custom-value2').hide();
+      }
     });
 
   },
 
   handle_result: function(data) {
-    if(data.count > 0) {
-      // mnj_map.map.checkResize();
-      // mnj_map.map.panTo(new GLatLng(parseFloat(data['data'][0]['lat']),parseFloat(data['data'][0]['lng'])));
-      mnj_map.map.setCenter({lat:parseFloat(data['data'][0]['lat']), lng:parseFloat(data['data'][0]['lng'])});
-      if (mnj_map.map.getZoom() < mnj_map.detailGroupZoom) mnj_map.map.setZoom(mnj_map.detailGroupZoom);
-    }
+    
+    // if(data.map.length > 0) {
+    //   // mnj_map.map.checkResize();
+    //   // mnj_map.map.panTo(new GLatLng(parseFloat(data['data'][0]['lat']),parseFloat(data['data'][0]['lng'])));
+    //   mnj_map.map.setCenter({lat:parseFloat(data['map'][0]['lat']), lng:parseFloat(data['map'][0]['lng'])});
+    //   // if (mnj_map.map.getZoom() < mnj_map.detailGroupZoom) mnj_map.map.setZoom(mnj_map.detailGroupZoom);
+    // }
 
-    for (var i=0; i<data.count; i++) {
-      mnj_map.render_property(data['data'][i]);
+    for (var i = 0; i < mnj_map.markers.length; i++ ) {
+      mnj_map.markers[i].setMap(null);
+    }
+    mnj_map.markers = [];
+    mnj_map_markers = {}
+
+    for (var i=0; i<data.map.length; i++) {
+      mnj_map.render_property(data.map[i], data.mode);
     }
 
     /*
@@ -328,53 +570,135 @@ var mnj_map = {
 
   },
 
-  render_property: function(data) {
-    var parcel = data['parcel'];
-    if(mnj_parcels[parcel]) return;
+  render_property: function(data, mode) {
 
-    mnj_parcels[parcel] = jQuery.extend(true, {}, data);
-    // add marker
-    mnj_map_markers[parcel] = new google.maps.Marker({
-      position: {lat: parseFloat(mnj_parcels[parcel]['lat']), lng: parseFloat(mnj_parcels[parcel]['lng'])},
-      map: mnj_map.map
-    });
+    var marker = null;
 
-    mnj_map_markers[parcel].parcel = parcel;
+    if (mode == 0) {
+      var parcel = data['parcel'];
 
-    var $info = jQuery('<div>' + jQuery('#mnj_templates #map_info').html() + '</div>');
-    $info.find('.parcel').html(parcel);
-    $info.find('.address').html(data['addr']);
-    $info.find('.bedroom').html(data['bedrooms']);
-    if (data['pools'] && (data['pools'][0] > 0)) {
-      $info.find('.pool').html(data['pools'][0] + " " + data['pools'][1]);
-    } else {
-      $info.find('.pool').html("N/A");
+      var images = [
+        pluginurl + 'public/imgs/map/h-grey.png',
+        pluginurl + 'public/imgs/map/h-blue.png',
+        pluginurl + 'public/imgs/map/h-green.png',
+        pluginurl + 'public/imgs/map/h-orange.png',
+        pluginurl + 'public/imgs/map/h-pink.png'
+      ];
+
+      var img_ind = 3;
+      if (data['sc'] == 1) {
+        img_ind = 2;
+      } else if (data['sc'] == 2) {
+        img_ind = 1;
+      } else if (data['sc'] == 0) {
+        img_ind = 0;
+      }
+
+      // add marker
+      marker = new google.maps.Marker({
+        position: {lat: parseFloat(data['lat']), lng: parseFloat(data['lng'])},
+        map: mnj_map.map,
+        icon: images[img_ind]
+      });
+      mnj_map_markers[parcel] = marker;
+
+      marker.parcel = parcel;
+      marker.mode = mode;
+
+      var $info = jQuery('<div>' + jQuery('#mnj_templates #map_info').html() + '</div>');
+      $info.find('.parcel').html(parcel);
+      $info.find('.address').html(data['addr']);
+      $info.find('.bedroom').html(data['bedrooms']);
+      if (data['pools'] && (data['pools'][0] > 0)) {
+        $info.find('.pool').html(data['pools'][0] + " " + data['pools'][1]);
+      } else {
+        $info.find('.pool').html("N/A");
+      }
+      
+      if (data['photo'][0] > 0) {
+        $info.find('.photo').html('<img src="' + data['photo'][1] + '">');
+      } else {
+        $info.find('.property_map_info').addClass('no-photo');
+      }
+      $info.find('.property_map_info').attr('parcel', parcel);
+      var infowindow = new google.maps.InfoWindow({
+        maxWidth: 200,
+        content: $info.html()
+      });
+      marker.infowindow = infowindow;
+
+      marker.addListener('mouseover', function() {
+        this.setAnimation(null);
+        this.infowindow.open(mnj_map.map, this);
+      });
+      marker.addListener('mouseout', function() {
+        this.infowindow.close();
+      });
+      marker.addListener('click', function() {
+        // Load estate content
+        // mnj_map.map.panTo(marker.position);
+        // marker.setAnimation(google.maps.Animation.BOUNCE);
+        this.setAnimation(null);
+        mnj_map.load_detail(this.parcel);
+      });
+
+    } else if (mode == 1) {
+      var parcel = data['parcel'];
+
+      // add marker
+      var images = [
+        pluginurl + 'public/imgs/map/m1.png',
+        pluginurl + 'public/imgs/map/m2.png',
+        pluginurl + 'public/imgs/map/m3.png',
+        pluginurl + 'public/imgs/map/m4.png',
+        pluginurl + 'public/imgs/map/m5.png'
+      ];
+
+      var img_ind = 0;
+      if (data['cnt'] > 100000) {
+        img_ind = 4;
+      } else if (data['cnt'] > 10000) {
+        img_ind = 3;
+      } else if (data['cnt'] > 1000) {
+        img_ind = 2;
+      } else if (data['cnt'] > 100) {
+        img_ind = 1;
+      }
+
+      marker = new google.maps.Marker({
+        position: {lat: parseFloat(data['lat']), lng: parseFloat(data['lng'])},
+        map: mnj_map.map,
+        label: data['cnt'],
+        icon: images[img_ind]
+      });
+
+      marker.mode = mode;
+
+      var $info = jQuery('<div>' + (data['zip']?('Zip: ' + data['zip'] + '<br>Parcels: ' + data['cnt'] + ' found)'):'Unknown Zipcode') + '</div>');
+      var infowindow = new google.maps.InfoWindow({
+        maxWidth: 100,
+        content: $info.html()
+      });
+      marker.infowindow = infowindow;
+      
+      marker.addListener('mouseover', function() {
+        this.infowindow.open(mnj_map.map, this);
+      });
+      marker.addListener('mouseout', function() {
+        this.infowindow.close();
+      });
+      marker.addListener('click', function() {
+        var center = new google.maps.LatLng(this.position.lat(), this.position.lng());
+        // using global variable:
+        mnj_map.map.panTo(center);
+        // if (mnj_map.map.getZoom() < mnj_map.detailGroupZoom) mnj_map.map.setZoom(mnj_map.detailGroupZoom);
+        mnj_map.map.setZoom(mnj_map.map.getZoom() + mnj_map.zoomInStep);
+      });
+
     }
+
+    if (marker) mnj_map.markers.push(marker);
     
-    if (data['photo'][0] > 0) {
-      $info.find('.photo').html('<img src="' + data['photo'][1] + '">');
-    } else {
-      $info.find('.property_map_info').addClass('no-photo');
-    }
-    $info.find('.property_map_info').attr('parcel', parcel);
-    var infowindow = new google.maps.InfoWindow({
-      maxWidth: 200,
-      content: $info.html()
-    });
-    mnj_map_markers[parcel].infowindow = infowindow;
-
-    mnj_map_markers[parcel].addListener('mouseover', function() {
-      this.infowindow.open(mnj_map.map, this);
-    });
-    mnj_map_markers[parcel].addListener('mouseout', function() {
-      this.infowindow.close();
-    });
-    mnj_map_markers[parcel].addListener('click', function() {
-      // Load estate content
-      // mnj_map.map.panTo(marker.position);
-      // marker.setAnimation(google.maps.Animation.BOUNCE);
-      mnj_map.load_detail(this.parcel);
-    });
   },
 
   open_detail_view: function() {
@@ -406,6 +730,12 @@ var mnj_map = {
         // alert(data.message);
         jQuery('body').completed();
 
+        if (!data) {
+          mnj_map.close_detail_view();
+          notify.error('Oops. Something went wrong. Please try again later.');
+          return;
+        }
+
         if (data['error'] != 0) {
           mnj_map.close_detail_view();
           if (data['msg']) notify.error(data['msg']);
@@ -416,7 +746,7 @@ var mnj_map = {
     }).fail(function() {
         // alert('There was a problem calling you - please try again later.');
         jQuery('body').completed();
-        notify.error('There was a problem calling you - please try again later.');
+        notify.error('Oops. Something went wrong. Please try again later.');
         mnj_map.close_detail_view();
     }).always(function() {
         
@@ -518,88 +848,83 @@ var mnj_map = {
 
   },
 
-  grab_ranged: function() {
+  render_list: function(data) {
     if (!jQuery('#neibour_estates').is(':visible')) return;
 
-    var bounds = mnj_map.map.getBounds();
-    mnj_map.filterd = [];    
-    for (var parcel in mnj_map_markers) {
-      var marker = mnj_map_markers[parcel];
-      if (bounds.contains(marker.position)) {
-        var data = mnj_parcels[parcel];
-        if (!data) continue;
-        mnj_map.filterd.push(data);  
-      }
-    }
-
-    mnj_map.refresh_grabed();
-  },
-
-  refresh_grabed: function() {
-
-    // do sort
-    jQuery('#neibour_estates .lbl-cnt').html(mnj_map.filterd.length + " result" + (mnj_map.filterd.length>1?'s':'') + "." );
-
-    var sort_type = jQuery('#panel_sort_type').val();
-    mnj_map.filterd.sort(function(a, b) {
-      if (sort_type == '0') {
-        return (a['udt'] > b['udt'])?1:-1;
-      } else if (sort_type == '1') {
-        return (parseFloat(a['price']) < parseFloat(b['price']))?-1:1;
-      } else if (sort_type == '2') {
-        return (parseFloat(a['price']) > parseFloat(b['price']))?-1:1;
-      } else if (sort_type == '3') {
-        return (parseInt(a['bedrooms']) > parseInt(b['bedrooms']))?-1:1;
-      } else if (sort_type == '4') {
-        return (parseInt(a['bath']) > parseInt(b['bath']))?-1:1;
-      } else if (sort_type == '5') {
-        return (parseFloat(a['sqft']) > parseFloat(b['sqft']))?-1:1;
-      } else if (sort_type == '6') {
-        return (parseInt(a['builtin']) > parseInt(b['builtin']))?-1:1;
-      }
-    });
+    jQuery('#neibour_estates .lbl-cnt').html(data.count.formatMoney(0) + ' property(s)');
 
     jQuery('#neibour_estates_wrapper').html('');
-    // after sort
-    for (var i=0; i<mnj_map.filterd.length; i++) {
-      
-      var data = mnj_map.filterd[i];
-      var parcel = data['parcel'];
+    mnj_parcels = {};
 
-      var $info = jQuery(jQuery('#mnj_templates #grabed_block').html());
+    for (var i=0; i<data.list.length; i++) {
+      var parcel = data.list[i]['parcel'];
+      mnj_parcels[parcel] = data.list[i];
 
-      $info.find('.price-details').html('$' + data['price'].formatMoney(0) + ((data['type'] == 'Residential Rental')?'/mo':''));
-      $info.find('.short-details').html(data['short_details']);
-      $info.find('.addr-details').html(data['full_addr']);
-
-      var diff = moment().diff(moment(data['udt']));
-      $info.find('.time-details').html(humanizeDuration(diff, { largest: 1 }) + ' ago');
-      
-      if (data['photo'][0] > 0) {
-        $info.find('.photo_count').html(data['photo'][0]);
-        $info.find('.photo').html('<img src="' + data['photo'][1] + '">');
-      } else {
-        $info.addClass('no-photo');
-        $info.find('.photo_count').html('No Photo');
-        $info.find('.photo').html('<img src="' + home_url + '/wp-content/plugins/markninja-estate/public/imgs/no-image.png">');
-      }
-      $info.attr('parcel', parcel);
-      
-      jQuery('#neibour_estates_wrapper').append($info);
+      var navLen = 5;
+      mnj_map.render_nav_bar(5, data.count, data.page, data.limit);
+      mnj_map.render_list_item(data.list[i]);
 
     }
+
+  },
+
+  render_nav_bar: function(navLen, total, current, limit) {
+    var lastPage = Math.ceil(total/limit);
+    var $wrapper = jQuery('#neibour_estates #neibour_estates_nav');
+    $wrapper.html('<ul></ul>');
+    $wrapper = $wrapper.find('ul');
+    jQuery('<li class="nav-item nav-item-first"><a title="1" href="#" data-page="1" class="' + (current==1?'disabled':'') + '"><<</a></li>').appendTo($wrapper);
+    jQuery('<li class="nav-item nav-item-prev"><a title="' + Math.max(1, (current-1)) + '" href="#" data-page="' + Math.max(1, (current-1)) + '" class="' + (current==1?'disabled':'') + '"><</a></li>').appendTo($wrapper);
+
+    var halfv = Math.floor(navLen / 2);
+    for (var page = Math.min(Math.max(1, lastPage-navLen+1), Math.max(1, current-halfv)); page<=Math.min(lastPage, Math.max(1, current-halfv) + navLen); page++) {
+      jQuery('<li class="nav-item ' + (current==page?'active':'') + '"><a title="' + page + '" href="#" data-page="' + page + '"  class="' + (current==page?'disabled':'') + '">' + page + '</a></li>').appendTo($wrapper);
+    }
+
+    jQuery('<li class="nav-item nav-item-next"><a title="' + Math.min(lastPage, (current+1)) + '" href="#" data-page="' + Math.min(lastPage, (current+1)) + '"  class="' + (current==lastPage?'disabled':'') + '">></a></li>').appendTo($wrapper);
+    jQuery('<li class="nav-item nav-item-last"><a title="' + lastPage + '" ' + (current==lastPage?'disabled':'') + '" href="#" data-page="' + lastPage + '"  class="' + (current==lastPage?'disabled':'') + '">>></a></li>').appendTo($wrapper);
+    
+
+  },
+
+  render_list_item: function(data) {
+
+    var parcel = data['parcel'];
+    var $info = jQuery(jQuery('#mnj_templates #grabed_block').html());
+
+    $info.find('.price-details').html('$' + data['price'].formatMoney(0) + ((data['type'] == 'Residential Rental')?'/mo':''));
+    $info.find('.short-details').html(data['short_details']);
+    $info.find('.addr-details').html(data['full_addr']);
+
+    var diff = moment().diff(moment(data['udt']));
+    $info.find('.time-details').html(humanizeDuration(diff, { largest: 1 }) + ' ago');
+    
+    if (data['photo'][0] > 0) {
+      $info.find('.photo_count').html(data['photo'][0]);
+      $info.find('.photo').html('<img src="' + data['photo'][1] + '">');
+    } else {
+      $info.addClass('no-photo');
+      $info.find('.photo_count').html('No Photo');
+      $info.find('.photo').html('<img src="' + home_url + '/wp-content/plugins/markninja-estate/public/imgs/no-image.png">');
+    }
+    $info.attr('parcel', parcel);
+    
+    jQuery('#neibour_estates_wrapper').append($info);
   },
 
   init: function() {
+    mnj_map.init_map();
     mnj_map.bind_events();
     mnj_map.init_rule_set();
-    mnj_map.init_map();
 
-    if (Object.keys(mnj_search_params).length > 0) {
-      mnj_map.render_rule_set(mnj_search_params);
-      // let 's search instantly
-      jQuery('#mng_map_search').submit();
-    }
+    setTimeout(function(){
+      if (Object.keys(mnj_search_params).length > 0) {
+        mnj_map.render_rule_set(mnj_search_params);
+        // let 's search instantly
+        jQuery('#mng_map_search').submit();
+      }
+    }, 1000);
+    
 
   }
 };

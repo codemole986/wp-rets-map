@@ -13,18 +13,21 @@ class MarkninjaAPI {
 	public $timeout       = false;
 	public $last_url;
 	public $error;
+	public $debug = false;
 
 	private static $url_templates = [
 		"lookup"  => 'http://www.markninja.com/las/markninja-api/public/api/estate/lookup',
 		"search"  => 'http://www.markninja.com/las/markninja-api/public/api/estate/search',
+		"list"  => 'http://www.markninja.com/las/markninja-api/public/api/estate/list',
 		"load"  => 'http://www.markninja.com/las/markninja-api/public/api/estate/load',
 	];
 
 	// --- API Methods
 
-	public function __construct($api_key=null, $api_secret=null) {
+	public function __construct($api_key=null, $api_secret=null, $debug=false) {
 		$this->api_key = $api_key;
 		$this->api_secret = $api_secret;
+		$this->debug = $debug;
 	}
 
 	// get provides access to any Quandl API endpoint. There is no need
@@ -32,6 +35,11 @@ class MarkninjaAPI {
 	public function search($params=array()) {
 		$url = $this->getUrl("search", $params);
 
+		return json_decode($this->curl($url), true);
+	}
+
+	public function getList($params=array()) {
+		$url = $this->getUrl("list", $params);
 		return json_decode($this->curl($url), true);
 	}
 
@@ -51,12 +59,19 @@ class MarkninjaAPI {
 	// a variable number of parameters, which will be replaced
 	// in the template.
 	private function getUrl($key, $params=array()) {
+
+		if ($this->debug)	print_r($params);
+
 		$template = self::$url_templates[$key];
-		$params_url = '';
-		foreach ($params as $key => $value) {
-			$params_url .= ($params_url == ''?'':'&') . $key . '=' . urlencode($value);
-		}
+		$params_url = http_build_query($params);
+		
 		$this->last_url = $template . "?" .  $params_url;
+		
+		if ($this->debug) {
+			echo $this->last_url;
+			exit;
+		}
+
 		return $this->last_url;
 	}
 

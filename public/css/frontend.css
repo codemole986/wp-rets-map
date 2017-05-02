@@ -46,14 +46,19 @@
 .mnj_search_rule_list li .btn {position: absolute; top: 8px; right: 10px;}
 .mnj_search_rule_list li .input-group {margin-bottom: 2px;}
 .mnj_search_rule_list li .input-group .input-group-addon:first-child {
-    border: solid 1px #ceae7f;
-    background: #ffdead;
+    border: solid 1px #b0e2b0;
+    background: #caf9ca;
     min-width: 80px;
     text-align: right;
     border-right: none;
 }
 .mnj_search_rule_list li .input-group:last-child {margin-bottom: 0px;}
 #mnj_search_rules li.active {background: #b8d0ae;}
+#mnj_search_rules .form-control {height: 30px; padding: 0 5px;}
+#mnj_search_rules .mnj-search-custom-value1, 
+#mnj_search_rules .mnj-search-custom-value2 {float: left;}
+#mnj_search_rules li[type=custom] .form-control {border-radius: 0;}
+#mnj_search_rules .col {padding: 0;}
 
 .mnj_map_wrapper {border: solid 1px #aaa; border-radius: 10px; padding: 5px;}
 .mnj_map_inner {border-radius: 5px;}
@@ -64,7 +69,7 @@
   background-position: center center;
   background-repeat: no-repeat;
   /* background-image: image-url('call-loader-200.gif'); */
-  background-image: url('imgs/ajax-loader.gif');
+  background-image: url('imgs/loading_ico.gif');
   position: fixed;
   left: 0;
   right: 0;
@@ -404,7 +409,7 @@
 #mnj-map-static-page .mnj_map_wrapper {
     position: fixed;
     left: 10px;
-    right: 610px;
+    right: 615px;
     top: 60px;
     bottom: 10px;
 }
@@ -424,10 +429,41 @@
 #mnj-map-static-page #neibour_estates_wrapper {
     position: absolute;
     border: 0px;
-    top: 100px;
+    top: 150px;
     overflow: auto;
     bottom: 0;
     width: 100%;
+}
+
+#neibour_estates_nav {}
+#neibour_estates_nav ul {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    text-align: right;
+}
+#neibour_estates_nav ul .nav-item {
+    margin: 2px;
+    display: inline-block;
+    vertical-align: middle;
+}
+#neibour_estates_nav ul .nav-item a {
+    display: block;
+    position: relative;
+    padding: 6px 12px;
+    line-height: 1.5em;
+    text-decoration: none;
+    color: #22c722;
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+#neibour_estates_nav ul .nav-item a.disabled {
+    background: #eee;
+    color: #ccc;
+}
+#neibour_estates_nav ul .nav-item.active a {
+    background: #38ec38;
+    color: #fff;
 }
 
 @media screen and (max-width: 1200px) and (min-width: 700px) {
@@ -437,7 +473,15 @@
     #mnj-map-static-page .neibour_estates {
         width: 300px;
     }
-    #mnj-map-static-page .mnj_map_wrapper {right: 310px;}
+    #mnj-map-static-page .mnj_map_wrapper {right: 315px;}
+    #neibour_estates_nav ul .nav-item {margin: 1px;}
+    #neibour_estates_nav ul .nav-item a {
+        padding: 6px 0px;
+        width: 26px;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
 }
 
 @media screen and (max-width: 949px) {
