@@ -36,7 +36,7 @@
     background: #fff;
 }
 .mnj-search-panel .panel-heading {position: relative; padding: 5px;}
-.mnj-search-panel .panel-heading h3 {padding:0; top: 5px; position: absolute; line-height: 30px; right: 100px; left: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+.mnj-search-panel .panel-heading h3 {padding:0; top: 5px; position: absolute; line-height: 30px; right: 100px; left: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 10px;}
 
 #mnj_search_rule_set {border-right: solid 1px #ddd; padding-right: 5px;}
 .mnj_search_rule_list {list-style: none; margin: 0; padding: 0;}
@@ -60,15 +60,15 @@
 #mnj_search_rules li[type=custom] .form-control {border-radius: 0;}
 #mnj_search_rules .col {padding: 0;}
 
-.mnj_map_wrapper {border: solid 1px #aaa; border-radius: 10px; padding: 5px;}
-.mnj_map_inner {border-radius: 5px;}
+.mnj_map_wrapper {}
+.mnj_map_inner {}
 
 
 .loading-overlay {
+  /*
   background-color: #eee;
   background-position: center center;
   background-repeat: no-repeat;
-  /* background-image: image-url('call-loader-200.gif'); */
   background-image: url('imgs/loading_ico.gif');
   position: fixed;
   left: 0;
@@ -76,6 +76,20 @@
   top: 0;
   bottom: 0;
   z-index: 1000;
+  */
+
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: url(imgs/ajax_loader-1.gif) center no-repeat #000;
+    z-index: 1000;
+    width: 50px;
+    height: 50px;
+    border: solid 1px #000;
+    border-radius: 5px;
+    opacity: 0.9;
+    background-size: 80%;
 }
 
 
@@ -119,7 +133,7 @@
     margin-left: -37.5%;
     top: 0;
 }
-.mnj_detail_header {z-index: 120;}
+.mnj_detail_header {z-index: 999999;}
 /*.admin-bar .mnj_detail_view, 
 .admin-bar .mnj_detail_header {
     top: 40px;
@@ -240,14 +254,13 @@
     height: 180px;
     max-height: 300px;
     /*border: solid 1px #ccc;*/
-    padding: 3px;
-    background: #fff;
-    margin: 3px;
+    background: url('imgs/cheque.png') #fff;
+    margin: 1px;
 }
 .mnj_detail_view .photos .item a img {width: auto; height: 100%; margin: auto;}
 .mnj_detail_view .photos .item.is_main a {
     /*width: 410px;*/
-    height: 366px;
+    height: 361px;
     max-height: 600px;
 }
 .mnj_detail_view .photos .slick-slider {max-height: 600px;}
@@ -429,7 +442,7 @@
 #mnj-map-static-page #neibour_estates_wrapper {
     position: absolute;
     border: 0px;
-    top: 150px;
+    top: 100px; /* 150px; */
     overflow: auto;
     bottom: 0;
     width: 100%;
@@ -500,6 +513,19 @@
         display: none;
     }
     #mnj-map-static-page .mnj_map_wrapper {right: 10px;}
+
+    .mnj-search-panel .panel-heading .btn-modify-criteria {
+        width: 90px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .mnj-search-panel .panel-heading h3 { left: 100px; }
+    .mnj_search_rule_list li .input-group .input-group-addon:first-child {
+        max-width: 100px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .mnj_search_rule_list li .input-group-sm>.form-control {font-size: 11px;}
 }
 
 .input-group .msg.error {
@@ -526,4 +552,24 @@
     content: "\b7";
     display: inline-block;
     margin: 0 0 0 5px;
+}
+
+.neibour_estates_loadmore_state {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: url(imgs/ajax_loader-1.gif) center no-repeat #000;
+    z-index: 10;
+    width: 50px;
+    height: 50px;
+    border: solid 1px #000;
+    border-radius: 5px;
+    opacity: 0.9;
+    background-size: 80%;
+}
+
+.neibour_estates_loadmore_state.loading {
+    display: block;
 }

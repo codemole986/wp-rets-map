@@ -15,7 +15,7 @@ var mnj_pack = {
               jQuery.getJSON(ajaxurl + "?action=mnj_estate_search", { q: term }, function(data){ response(data); });
           },
           renderItem: function (item, search){
-            if (this.me.is(":focus")) {
+            if (this.me.is(":focus") || true) {
               search = search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
               var re = new RegExp("(" + search.split(' ').join('|') + ")", "gi");
               var lbl_cnt = '';
@@ -48,11 +48,21 @@ var mnj_pack = {
 
 var mnj_map = {
   map: null,
+  drawingManager: null,
+  drawingShapes: ['circle', 'polygon', 'rectangle'],
+  currentRect: null,
+  polygons: {},
+  polygonInd: 0,
+
+  loadedMoreCount: 0,
+
   markers: [],
   zoomInStep: 4,
-  detailGroupZoom: 18,
-  detailZoom: 20,
+  detailGroupZoom: 12,
+  detailZoom: 16,
   satelliteZoom: 18,
+
+  viewModeLimit: 500,
 
   mapChangedUnderWatch: false,
   mapChangedCount: 0,
@@ -66,6 +76,16 @@ var mnj_map = {
   },
 
   init_map: function() {
+
+    if (!google.maps.Polygon.prototype.getBounds) {
+ 
+      google.maps.Polygon.prototype.getBounds=function(){
+          var bounds = new google.maps.LatLngBounds()
+          this.getPath().forEach(function(element,index){bounds.extend(element)})
+          return bounds
+      }
+     
+    }
 
     if(jQuery('#mnj-map-static-page').length > 0) {
       jQuery('#mnj_google_map').height(jQuery('#mnj-map-static-page .mnj_map_wrapper').height());
@@ -82,12 +102,219 @@ var mnj_map = {
       zoom: 8,
       center: lasvegas,
       // disableDefaultUI: true
-      mapTypeId: 'satellite'
+      mapTypeId: 'hybrid',
+      tilt: 45
     });
+    google.maps.event.addListener(mnj_map.map, 'dblclick', function (event) {
+      return;
+    });
+
+    mnj_map.drawingManager = new google.maps.drawing.DrawingManager({
+      drawingMode: google.maps.drawing.OverlayType.MARKER,
+      drawingControl: true,
+      drawingControlOptions: {
+        position: google.maps.ControlPosition.TOP_CENTER,
+        // drawingModes: ['marker', 'circle', 'polygon', 'polyline', 'rectangle']
+        drawingModes: mnj_map.drawingShapes
+      },
+      circleOptions: {
+        fillColor: '#ffff00',
+        fillOpacity: 0.2,
+        strokeWeight: 3,
+        clickable: true,
+        editable: true,
+        zIndex: 10
+      },
+      polygonOptions: {
+        fillColor: '#ffff00',
+        fillOpacity: 0.2,
+        strokeWeight: 3,
+        clickable: true,
+        editable: true,
+        zIndex: 10
+      },
+      rectangleOptions: {
+        fillColor: '#ffff00',
+        fillOpacity: 0.2,
+        strokeWeight: 3,
+        clickable: true,
+        editable: true,
+        zIndex: 10
+      }
+
+    });
+
+    mnj_map.drawingManager.setDrawingMode(null);
+    google.maps.event.addListener(mnj_map.drawingManager, 'overlaycomplete', function(event) {
+      // console.log(event.type);
+      if (mnj_map.drawingShapes.indexOf(event.type) < 0) {
+        event.overlay.setMap(null);
+        return;
+      }
+
+      mnj_map.addPolygon (event.overlay, event.type);
+      mnj_map.drawingManager.setDrawingMode(null);
+
+    });
+
+    mnj_map.drawingManager.setMap(mnj_map.map);
 
     mnj_map.map.addListener('center_changed', mnj_map.map_pos_changed);
     mnj_map.map.addListener('zoom_changed', mnj_map.map_pos_changed);
   },
+
+  addPolygon: function(polygon, pType) {
+    var idv = 'poly_' + mnj_map.polygonInd;
+    polygon.idv = idv;
+    polygon.type = pType;
+    polygon.setOptions({draggable: true});
+
+    mnj_map.polygons[idv] = polygon;
+    google.maps.event.addListener(polygon, 'dblclick', function (event) {
+      event.stop();
+      this.setMap(null);
+      delete mnj_map.polygons[this.idv];
+      return false;
+    });
+
+    /*
+    if (pType == 'circle') {
+      google.maps.event.addListener(polygon, 'center_changed', function (event) {});
+      google.maps.event.addListener(polygon, 'radius_changed', function (event) {});
+    } else if (pType == 'rectangle') {
+      google.maps.event.addListener(polygon, 'bounds_changed', function (event) {});
+    } else if (pType == 'polygon') {
+      polygon.getPaths().forEach(function(path, index){
+        google.maps.event.addListener(path, 'insert_at', function(){
+          // New point
+        });
+        google.maps.event.addListener(path, 'remove_at', function(){
+          // Point was removed
+        });
+        google.maps.event.addListener(path, 'set_at', function(){
+          // Point was moved
+        });
+
+      });
+
+      google.maps.event.addListener(polygon, 'dragend', function(){
+        // Polygon was dragged
+      });
+    }
+    */
+
+    mnj_map.polygonInd ++;
+  },
+
+  backupPolygons: function() {
+    var polygons = [];
+    for (var key in mnj_map.polygons) {
+      var polygon = mnj_map.polygons[key];
+      var poly = {
+        'type': mnj_map.polygons[key].type
+      };
+      if (polygon.type == 'circle') {
+        poly.center = polygon.getCenter();
+        poly.radius = polygon.getRadius();
+      } else if (polygon.type == 'rectangle') {
+        poly.bound = polygon.getBounds();
+      } else if (polygon.type == 'polygon') {
+        var paths = [];
+        polygon.getPath().forEach(function(path, index){
+          paths.push({lat: path.lat(), lng: path.lng()});
+        });
+        poly.path = paths;
+      }
+      polygons.push(poly);
+    }
+    return polygons;
+  },
+
+  drawPolygons: function(polygons) {
+
+    for (var i=0; i<polygons.length; i++) {
+      if (polygons[i].type == 'circle') {
+        var polygon = new google.maps.Circle({
+          map: mnj_map.map,
+          center: polygons[i].center,
+          radius: polygons[i].radius,
+          editable: true,
+          fillColor: '#ffff00',
+          fillOpacity: 0.2,
+          strokeWeight: 3,
+          zIndex: 10
+        });
+        mnj_map.addPolygon(polygon, 'circle');
+      } else if (polygons[i].type == 'rectangle') {
+        var polygon = new google.maps.Rectangle({
+          map: mnj_map.map,
+          bounds: polygons[i].bound,
+          editable: true,
+          fillColor: '#ffff00',
+          fillOpacity: 0.2,
+          strokeWeight: 3,
+          zIndex: 10
+        });
+        polygon.setMap(mnj_map.map);
+        mnj_map.addPolygon(polygon, 'rectangle');
+      } else if (polygons[i].type == 'polygon') {
+        var polygon = new google.maps.Polygon({
+          map: mnj_map.map,
+          paths: polygons[i].path,
+          editable: true,
+          fillColor: '#ffff00',
+          fillOpacity: 0.2,
+          strokeWeight: 3,
+          zIndex: 10
+        });
+        mnj_map.addPolygon(polygon, 'polygon');
+      }
+    }
+
+  },
+
+  getPolygonsBound: function() {
+    var bound = new google.maps.LatLngBounds();
+
+    for (var key in mnj_map.polygons) {
+      var moreBound = mnj_map.polygons[key].getBounds();
+      bound.extend(moreBound.getNorthEast());
+      bound.extend(moreBound.getSouthWest());
+    }
+
+    return bound;
+  },
+
+  hasPolygons: function() {
+    return (Object.keys(mnj_map.polygons).length > 0);
+  },
+
+  isInPolygon: function(latlng) {
+    var isInPolygon = false;
+    for (var key in mnj_map.polygons) {
+      if (mnj_map.polygons[key].type == 'polygon') {
+        if (google.maps.geometry.poly.containsLocation(latlng, mnj_map.polygons[key])) {
+          isInPolygon = true;
+          break;
+        }  
+      } else if (mnj_map.polygons[key].type == 'rectangle') { 
+        if (mnj_map.polygons[key].getBounds().contains(latlng)) {
+          isInPolygon = true;
+          break;
+        }
+      } else if (mnj_map.polygons[key].type == 'circle') { 
+        if (google.maps.geometry.spherical.computeDistanceBetween( 
+            latlng,
+            mnj_map.polygons[key].getCenter()
+        ) <= mnj_map.polygons[key].getRadius()) {
+          isInPolygon = true;
+          break;
+        }
+      }
+    }
+    return isInPolygon;
+  },
+
 
   map_pos_changed: function() {
     if (!mnj_map.mapChangedUnderWatch) return;
@@ -118,22 +345,72 @@ var mnj_map = {
     var customObjs = jQuery('#mnj_search_rules li[type=custom]');
     var customRules = [];
     for (var i=0; i<customObjs.length; i++) {
+      var key = jQuery('.mnj-search-custom-field', customObjs[i]).val();
+      if (key == '') continue;
+
       var obj = [];
-      obj.push(jQuery('.mnj-search-custom-field', customObjs[i]).val());
-      obj.push(jQuery('.mnj-search-custom-op', customObjs[i]).val());
-      obj.push(jQuery('.mnj-search-custom-value1', customObjs[i]).val());
-      obj.push(jQuery('.mnj-search-custom-value2', customObjs[i]).val());
+      obj.push(key);
+      if (mnjListValues[key] && mnjListValues[key].length > 0) {
+        obj.push('=');
+        obj.push(jQuery('.mnj-search-custom-value1-list', customObjs[i]).val());
+        obj.push('');
+      } else {
+        obj.push(jQuery('.mnj-search-custom-op', customObjs[i]).val());
+        obj.push(jQuery('.mnj-search-custom-value1', customObjs[i]).val());
+        obj.push(jQuery('.mnj-search-custom-value2', customObjs[i]).val());
+      }
       customRules.push(obj);
     }
 
     if (customRules.length > 0) {
       searchByForm += ((searchByForm=="")?"":"&") + "custom=" + encodeURIComponent(JSON.stringify(customRules));  
     }
+
+    if (mnj_map.hasPolygons() || mnj_map.map.getZoom() > 16) {
+      searchByForm += ((searchByForm=="")?"":"&") + "mode=0";  
+    }
+
+    var polys = mnj_map.backupPolygons();
+    searchByForm += ((searchByForm=="")?"":"&") + "polygons=" + JSON.stringify(polys);
     
     return searchByForm;
   },
 
-  service_search: function() {
+  drawBounds: function(bound) {
+
+    var NE = bound.getNorthEast();
+    var SW = bound.getSouthWest();
+    var NW = new google.maps.LatLng(NE.lat(),SW.lng());
+    var SE = new google.maps.LatLng(SW.lat(),NE.lng());
+    var lineSymbol = {
+      path: 'M 0,-1 0,1',
+      strokeColor: '#FFFF00',
+      strokeOpacity: 1,
+      scale: 4
+    };
+
+    mnj_map.currentRect = new google.maps.Polyline({
+        path: [NE, SE, SW, NW, NE],
+        strokeOpacity: 0,
+        icons: [{
+          icon: lineSymbol,
+          offset: '0',
+          repeat: '20px'
+        }],
+        map: mnj_map.map
+      });
+    // mnj_map.currentRect = new google.maps.Rectangle({
+    //   strokeColor: '#FF0000',
+    //   strokeOpacity: 0.1,
+    //   strokeWeight: 1,
+    //   fillColor: '#FF0000',
+    //   fillOpacity: 0.1,
+    //   map: mnj_map.map,
+    //   bounds: bound
+    // });
+  },
+
+  service_search: function(isForced) {
 
     mnj_map.mapChangedUnderWatch = false;
 
@@ -149,6 +426,10 @@ var mnj_map = {
     }
 
     var bound = mnj_map.map.getBounds();
+    if (mnj_map.hasPolygons()) {
+      bound = mnj_map.getPolygonsBound();
+    }
+
     var rect = [
       {lat: bound.getSouthWest().lat(), lng: bound.getSouthWest().lng()},
       {lat: bound.getNorthEast().lat(), lng: bound.getNorthEast().lng()}
@@ -156,18 +437,40 @@ var mnj_map = {
     
     var searchByForm = mnj_map.composeSearchQuery();
 
-    ////////////////////////////////////////////////////
-    // check if really need to reload ...
-    //
+    if (!isForced) {
+      ////////////////////////////////////////////////////
+      // check if really need to reload ...
+      //
 
-    // mnj_map.map.getProjection().fromLatLngToPoint(
-    //     mnj_map.map.getCenter()
-    // );
+      // mnj_map.map.getProjection().fromLatLngToPoint(
+      //     mnj_map.map.getCenter()
+      // );
 
-    if (mnj_map.history.search == searchByForm) {
-      if (mnj_map.history.bound) {
-        if (mnj_map.history.bound.equals(bound)) return;
-        if (mnj_map.history.mode == '0') {
+      if (mnj_map.history.search == searchByForm) {
+        if (mnj_map.history.bound) {
+
+          // If same bounds, then no need to fetch again
+          if (mnj_map.history.bound.equals(bound)) {
+            mnj_map.mapChangedUnderWatch = true;
+            return;
+          }
+
+          // If moved JUST A LITTLE, then no need to fetch again
+          if (mnj_map.history.zoom == mnj_map.map.getZoom()) {
+            var scale = Math.pow(2, mnj_map.history.zoom);
+            var lastCenter = mnj_map.map.getProjection().fromLatLngToPoint(mnj_map.history.center);
+            var nowCenter = mnj_map.map.getProjection().fromLatLngToPoint(mnj_map.map.getCenter());
+            var roughDist = scale * (Math.abs(lastCenter.x-nowCenter.x) + Math.abs(lastCenter.y-nowCenter.y));
+            // console.log(lastCenter);
+            // console.log(nowCenter);
+            // console.log(roughDist);
+            if (roughDist < 50) {
+              mnj_map.mapChangedUnderWatch = true;
+              return;
+            }
+          }
+
+          
           // let 's check if bound is containig...
           var isContained = true;
           if ( !mnj_map.history.bound.contains(bound.getSouthWest()) )  isContained = false;
@@ -175,24 +478,57 @@ var mnj_map = {
           
           if (isContained) {
             // only refresh the list
-            mnj_map.service_list(1);
-            return;
+            if (mnj_map.history.mode == '0') {
+              mnj_map.mapChangedUnderWatch = true;
+              mnj_map.service_list(1);
+              return;
+            } else if (mnj_map.history.mode == '1') {
+              if (mnj_map.map.getZoom() < 12) {
+
+                // let's check if contained zipcode properties are more than the limit to switche the view mode
+                var totalCnt = 0;
+                for (var i = 0; i < mnj_map.markers.length; i++ ) {
+                  if ((mnj_map.markers[i].mode == '1') && mnj_map.history.bound.contains(mnj_map.markers[i].getPosition())) {
+                    totalCnt += parseInt(mnj_map.markers[i].cnt);
+                  }
+                }
+                if (totalCnt > mnj_map.viewModeLimit) {
+                  mnj_map.mapChangedUnderWatch = true;
+                  mnj_map.service_list(1);
+                  return;
+                }
+
+              }
+            }
           }
         }
       }
+      //
     }
-    //
 
     jQuery('body').overlay();
 
+    if (mnj_map.currentRect)  mnj_map.currentRect.setMap(null);
+    if (mnj_map.hasPolygons()) {
+      bound = mnj_map.getPolygonsBound();
+      mnj_map.map.fitBounds(bound);
+      // mnj_map.drawBounds(bound);
+    }
+
+    mnj_map.history.zoom = mnj_map.map.getZoom();
     mnj_map.history.search = searchByForm;
     mnj_map.history.bound = bound;
+    mnj_map.history.center = mnj_map.map.getCenter();
+
+    var finalParams = searchByForm + "&" + jQuery.param({'rect': rect}) + "&order_type=" + jQuery('#neibour_estates #panel_sort_type').val();
+    var nowUrl = window.location.protocol + '//' + window.location.hostname + window.location.pathname;
+    history.pushState({}, jQuery(document).find("title").text(), nowUrl + '?' + finalParams);
 
     // Submit the form via ajax
     jQuery.ajax({
         url: ajaxurl + "?action=mnj_estate_retrieve",
-        method:'GET',
-        data: searchByForm + "&" + jQuery.param({'rect': rect}) + "&order_type=" + jQuery('#neibour_estates #panel_sort_type').val(),
+        method:'POST',
+        data: finalParams,
     }).done(function(data) {
         // alert(data.message);
         jQuery('body').completed();
@@ -205,7 +541,7 @@ var mnj_map = {
 
         mnj_map.history.mode = data.mode;
         mnj_map.handle_result(data);
-        mnj_map.render_list(data);
+        mnj_map.render_list(data, true);
 
         // let 's check if parcel is mentioned as search key
         var search_parcel = jQuery('#mng_map_search').find('[name=parcel]').val();
@@ -226,7 +562,7 @@ var mnj_map = {
 
   service_list: function(page, limit) {
 
-    mnj_map.mapChangedUnderWatch = false;
+    if (jQuery('#neibour_estates_loadmore_state').hasClass('loading'))  return;
 
     if (!mnj_map.search_valid()) {
       if (jQuery('#mnj_search_panel_body').attr('aria-expanded') == "false") {
@@ -240,14 +576,19 @@ var mnj_map = {
     }
 
     var bound = mnj_map.map.getBounds();
+    if (mnj_map.hasPolygons()) {
+      bound = mnj_map.getPolygonsBound();
+    }
+
     var rect = [
     {lat: bound.getSouthWest().lat(), lng: bound.getSouthWest().lng()},
       {lat: bound.getNorthEast().lat(), lng: bound.getNorthEast().lng()}
     ];
 
-    jQuery('#neibour_estates').overlay({'position': 'absolute'});
+    // jQuery('#neibour_estates').overlay({'position': 'absolute'});
+    jQuery('#neibour_estates_loadmore_state').addClass('loading');
     
-    var searchByForm = jQuery('#mng_map_search').serialize();
+    var searchByForm = mnj_map.composeSearchQuery();
 
     /*
     // on hold now...
@@ -265,8 +606,8 @@ var mnj_map = {
         data: searchByForm + "&" + jQuery.param({'rect': rect}) + "&page=" + page + "&order_type=" + jQuery('#neibour_estates #panel_sort_type').val(),
     }).done(function(data) {
         // alert(data.message);
-        jQuery('#neibour_estates').completed();
-        
+        // jQuery('#neibour_estates').completed();
+        jQuery('#neibour_estates_loadmore_state').removeClass('loading');
         if (!data || data.error != '0') {
           notify.error('Oops. Something went wrong. Please try again later.' + ((data&&data.msg)?('<br>' + data.msg):'') );
           return;
@@ -323,6 +664,13 @@ var mnj_map = {
 
   render_rule_set: function (params) {
     var search_typs = [];
+    var customs = false;
+    try {
+      customs = JSON.parse(params['custom']);
+    } catch(e){}
+
+    delete params['custom'];
+
     for (var key in params) {
       for(var i=0; i<mnj_search_rules.length; i++) {
         if((mnj_search_rules[i][2].indexOf(key) != -1) && (search_typs.indexOf(key)==-1)) {
@@ -335,6 +683,13 @@ var mnj_map = {
     for (var i=0; i<search_typs.length; i++) {
       var key = search_typs[i];
       mnj_map.render_rule(key, params);      
+    }
+
+    if (customs) {
+      for (var i=0; i<customs.length; i++) {
+        mnj_map.render_rule('custom', customs[i]);
+
+      }
     }
   },
 
@@ -408,6 +763,14 @@ var mnj_map = {
       searchBox.obj = elemObj;
 
       google.maps.event.addListener(searchBox, 'places_changed', mnj_map.searchByAddr);
+    } else if (type == 'custom') {
+      if (values && values.length > 0) {
+        $li.find('.mnj-search-custom-field').val(values[0]).change();
+        $li.find('.mnj-search-custom-op').val(values[1]);
+        $li.find('.mnj-search-custom-value1').val(values[2]);
+        $li.find('.mnj-search-custom-value1-list').val(values[2]);
+        $li.find('.mnj-search-custom-value2').val(values[3]);
+      }
     }
 
     mnj_map.after_rull_changed();
@@ -481,7 +844,7 @@ var mnj_map = {
 
     jQuery('#mng_map_search').submit(function(e){
       e.preventDefault();
-      mnj_map.service_search();
+      mnj_map.service_search(true);
     });
 
     jQuery('#mng_map_search').on('keyup keypress', function(e) {
@@ -527,7 +890,7 @@ var mnj_map = {
     jQuery('body').on('change', '.mnj-search-custom-op', function(e){
       var opt = jQuery(this).val();
       if (opt == 'between') {
-        jQuery(this).closest('.title').find('.mnj-search-custom-value1').css('width', '50%');
+        jQuery(this).closest('.title').find('.mnj-search-custom-value1').css('width', '50%').show();
         jQuery(this).closest('.title').find('.mnj-search-custom-value2').css('width', '50%').show();
       } else if ((opt == 'null') || (opt == 'not-null')) {
         jQuery(this).closest('.title').find('.mnj-search-custom-value1').hide();
@@ -538,6 +901,54 @@ var mnj_map = {
       }
     });
 
+    jQuery('body').on('change', '.mnj-search-custom-field', function(e){
+      var key = jQuery(this).val();
+      if (key == '') {
+        jQuery(this).closest('.title').find('.mnj-search-custom-op').val('=').change();
+        return;
+      }
+
+      if (mnjListValues[key] && mnjListValues[key].length > 0) {
+        var op = '<option value="=">Equal</option>';
+        jQuery(this).closest('.title').find('.mnj-search-custom-op').html(op);
+
+        jQuery(this).closest('.title').find('.mnj-search-custom-value1').hide();
+        jQuery(this).closest('.title').find('.mnj-search-custom-value2').hide();
+
+        jQuery(this).closest('.title').find('.mnj-search-custom-value1-list').html('').show();
+        for(var i=0; i<mnjListValues[key].length; i++) {
+          var $opt = jQuery('<option></option>');
+          $opt.attr('value', mnjListValues[key][i]);
+          $opt.text(mnjListValues[key][i]);
+          $opt.appendTo(jQuery(this).closest('.title').find('.mnj-search-custom-value1-list'));
+        }
+      } else {
+        var op = '<option value="=">Equal</option>' + 
+            '<option value="<>">NOT Equal</option>' + 
+            '<option value="null">NULL</option>' + 
+            '<option value="not-null">NOT NULL</option>' + 
+            '<option value="between">BETWEEN</option>' + 
+            '<option value="<"><</option>' + 
+            '<option value=">">></option>';
+        jQuery(this).closest('.title').find('.mnj-search-custom-op').html(op).val('=').change();
+        jQuery(this).closest('.title').find('.mnj-search-custom-value1-list').html('').hide();
+      }
+    });
+
+    jQuery('#neibour_estates_wrapper').scroll(function(){
+      var currentPos = jQuery(this).scrollTop() + jQuery(this).height();
+      var totalHeight = jQuery(this).get(0).scrollHeight;
+
+      if (currentPos > totalHeight - 100) {
+        mnj_map.load_more();
+      }
+    });
+
+  },
+
+  load_more: function() {
+    var nextPage = jQuery('#mnj_next_page').val();
+    if (nextPage != '-1') mnj_map.service_list(nextPage);
   },
 
   handle_result: function(data) {
@@ -570,6 +981,11 @@ var mnj_map = {
 
   },
 
+  isPropertyInMap: function(key) {
+    var keys = Object.keys(mnj_map_markers);
+    return (keys.indexOf(key) > -1);
+  },
+
   render_property: function(data, mode) {
 
     var marker = null;
@@ -594,6 +1010,13 @@ var mnj_map = {
         img_ind = 0;
       }
 
+      /////////////////////////////////////////////////////////////////////
+      // Check if polygon contains the pos
+      //
+      var latlng = new google.maps.LatLng({lat: parseFloat(data['lat']), lng: parseFloat(data['lng'])});
+      if (mnj_map.hasPolygons() && !mnj_map.isInPolygon(latlng)) return;
+      //
+
       // add marker
       marker = new google.maps.Marker({
         position: {lat: parseFloat(data['lat']), lng: parseFloat(data['lng'])},
@@ -602,8 +1025,9 @@ var mnj_map = {
       });
       mnj_map_markers[parcel] = marker;
 
-      marker.parcel = parcel;
       marker.mode = mode;
+      marker.parcel = parcel;
+      
 
       var $info = jQuery('<div>' + jQuery('#mnj_templates #map_info').html() + '</div>');
       $info.find('.parcel').html(parcel);
@@ -623,7 +1047,8 @@ var mnj_map = {
       $info.find('.property_map_info').attr('parcel', parcel);
       var infowindow = new google.maps.InfoWindow({
         maxWidth: 200,
-        content: $info.html()
+        content: $info.html(),
+        disableAutoPan: true   
       });
       marker.infowindow = infowindow;
 
@@ -649,14 +1074,14 @@ var mnj_map = {
       var images = [
         pluginurl + 'public/imgs/map/m1.png',
         pluginurl + 'public/imgs/map/m2.png',
-        pluginurl + 'public/imgs/map/m3.png',
+        // pluginurl + 'public/imgs/map/m3.png', // because of red, it looks like Danger Zone
         pluginurl + 'public/imgs/map/m4.png',
         pluginurl + 'public/imgs/map/m5.png'
       ];
 
       var img_ind = 0;
       if (data['cnt'] > 100000) {
-        img_ind = 4;
+        img_ind = 3;
       } else if (data['cnt'] > 10000) {
         img_ind = 3;
       } else if (data['cnt'] > 1000) {
@@ -673,11 +1098,13 @@ var mnj_map = {
       });
 
       marker.mode = mode;
+      marker.cnt = data['cnt'];
 
-      var $info = jQuery('<div>' + (data['zip']?('Zip: ' + data['zip'] + '<br>Parcels: ' + data['cnt'] + ' found)'):'Unknown Zipcode') + '</div>');
+      var $info = jQuery('<div>' + (data['zip']?('Zip: ' + data['zip'] + '<br>Parcels: ' + data['cnt']):'Unknown Zipcode') + '</div>');
       var infowindow = new google.maps.InfoWindow({
         maxWidth: 100,
-        content: $info.html()
+        content: $info.html(),
+        disableAutoPan: true   
       });
       marker.infowindow = infowindow;
       
@@ -848,24 +1275,53 @@ var mnj_map = {
 
   },
 
-  render_list: function(data) {
+  render_list: function(data, shouldRefresh) {
     if (!jQuery('#neibour_estates').is(':visible')) return;
 
-    jQuery('#neibour_estates .lbl-cnt').html(data.count.formatMoney(0) + ' property(s)');
+    var totalCount = data.count;
+    if(mnj_map.hasPolygons()) totalCount = mnj_map.markers.length;
+    jQuery('#neibour_estates .lbl-cnt').html(totalCount.formatMoney(0) + ' property(s)');
 
-    jQuery('#neibour_estates_wrapper').html('');
-    mnj_parcels = {};
-
-    for (var i=0; i<data.list.length; i++) {
-      var parcel = data.list[i]['parcel'];
-      mnj_parcels[parcel] = data.list[i];
-
-      var navLen = 5;
-      mnj_map.render_nav_bar(5, data.count, data.page, data.limit);
-      mnj_map.render_list_item(data.list[i]);
-
+    if (shouldRefresh) {
+      jQuery('#neibour_estates_wrapper').html('');
+      mnj_parcels = {};
     }
 
+    var renderedCount = 0;
+    for (var i=0; i<data.list.length; i++) {
+      var parcel = data.list[i]['parcel'];
+      if(mnj_map.hasPolygons() && !mnj_map.isPropertyInMap(parcel)) continue;
+      mnj_parcels[parcel] = data.list[i];
+
+      mnj_map.render_list_item(data.list[i]);
+      renderedCount ++;
+    }
+
+    // var navLen = 5;
+    // mnj_map.render_nav_bar(5, data.count, data.page, data.limit);
+    mnj_map.render_load_more(data.count, data.page, data.limit);
+    mnj_map.loadedMoreCount += renderedCount;
+    if ((jQuery('#mnj_next_page').val() != '-1') && (mnj_map.loadedMoreCount < 20)) {
+      mnj_map.load_more();
+    } else {
+      mnj_map.loadedMoreCount = 0;
+      jQuery('#neibour_estates_wrapper').scroll();
+    }
+
+  },
+
+  render_load_more: function(total, current, limit) {
+    var isReachedEnd = false;
+    if (mnj_map.hasPolygons()) {
+      var mapTotal = mnj_map.markers.length;
+      if (mapTotal == jQuery('#neibour_estates_wrapper .property_block').length) isReachedEnd = true;
+    }
+    var lastPage = Math.ceil(total/limit);
+    if (isReachedEnd || (parseInt(current) >= lastPage)) {
+      jQuery('#mnj_next_page').val('-1');
+    } else {
+      jQuery('#mnj_next_page').val(parseInt(current) + 1);
+    }
   },
 
   render_nav_bar: function(navLen, total, current, limit) {
@@ -919,7 +1375,32 @@ var mnj_map = {
 
     setTimeout(function(){
       if (Object.keys(mnj_search_params).length > 0) {
+
+        mnj_map.mapChangedUnderWatch = false;
+
         mnj_map.render_rule_set(mnj_search_params);
+
+        if (mnj_search_params['polygons']) {
+          try {
+            var polygonObj = JSON.parse(mnj_search_params['polygons']);  
+            if (polygonObj) {
+              mnj_map.drawPolygons(polygonObj);
+            }
+          } catch(e) {console.log(e);}
+        }
+
+        if (mnj_search_params['order_type']) {
+          jQuery('#neibour_estates #panel_sort_type').val(mnj_search_params['order_type']);
+        }
+
+        if (mnj_search_params['rect']) {
+          try {
+            var rect = mnj_search_params['rect'];
+            var bounds = new google.maps.LatLngBounds({lat: parseFloat(rect[0]['lat']), lng: parseFloat(rect[0]['lng'])}, {lat: parseFloat(rect[1]['lat']), lng: parseFloat(rect[1]['lng'])});
+            mnj_map.map.fitBounds(bounds);
+          } catch(e) {console.log(e);}
+        }
+
         // let 's search instantly
         jQuery('#mng_map_search').submit();
       }

@@ -40,14 +40,16 @@
 			</div>
 
 			<div class="row map-row">
-				<div class="col-md-8">
+				<div class="col-md-12">
 					<div class="mnj_map_wrapper">
 						<div id="mnj_google_map" class="mnj_map_inner"></div>
 					</div>
 				</div>
-				<div class="col-md-4">
+				<div class="col-md-12">
 					<div id="neibour_estates" class="neibour_estates">
 						<h4>Real Estate <span class="lbl-cnt"></span></h4>
+						<input type="hidden" id="mnj_next_page" value="-1">
+
 						<div class="searchbar">
 							<div class="input-group input-group-sm">
 								<label class="input-group-addon">Order By</label>
@@ -62,8 +64,9 @@
 								</select>
 							</div>
 						</div>
-						<div id="neibour_estates_nav"></div>
+						<div id="neibour_estates_nav" class="hidden"></div>
 						<div id="neibour_estates_wrapper"></div>
+						<div id="neibour_estates_loadmore_state" class="neibour_estates_loadmore_state"></div>
 					</div>
 				</div>
 			</div>
@@ -264,21 +267,21 @@
 				</div>
 			</div>
 
+			<?php $listValues = array(); ?>
 			<div id="mnj_custom_fields_model" style="display: none;">
 				<div class="col col-xs-6">
 					<div class="input-group input-group-sm">
 						<span class="input-group-addon">Custom</span>
 						<select class="form-control mnj-search-custom-field">
-							<optgroup label="A Clark">
-							<?php foreach (MarkninjaEstate::$searchFields[0] as $key) { ?>
-								<option value="<?php echo $key; ?>"><?php echo $key; ?></option>
+							<option value="">Please Select a Field</option>
+							<?php foreach (MarkninjaEstate::$searchFields as $key => $list) { ?>
+								<optgroup label="<?php echo $key; ?>">
+								<?php foreach ($list AS $k => $v) { ?>
+									<option value="<?php echo $key . '.' . $k; ?>"><?php echo $k; ?></option>
+									<?php if (count($v) > 0)	$listValues[$key . '.' . $k] = $v; ?>
+								<?php } ?>
+								</optgroup>
 							<?php } ?>
-							</optgroup>
-							<optgroup label="Las">
-							<?php foreach (MarkninjaEstate::$searchFields[1] as $key) { ?>
-								<option value="<?php echo $key; ?>"><?php echo $key; ?></option>
-							<?php } ?>
-							</optgroup>
 						</select>
 					</div>
 				</div>
@@ -296,19 +299,29 @@
 				<div class="col col-xs-4">
 					<input type="text" class="form-control mnj-search-custom-value1" />
 					<input type="text" class="form-control mnj-search-custom-value2" style="display: none;" />
+					<select class="form-control mnj-search-custom-value1-list" style="display: none;"></select>
 				</div>
 			</div>
 
 			<script>
+			  var mnjListValues = <?php echo json_encode($listValues); ?>;
 			  var home_url = "<?php echo home_url(); ?>";
 			  var mnj_search_rules = <?php echo Markninja_Helper::json_encode(MarkninjaEstate::$searchTypes); ?>;
 			  <?php
-			  	$search_params = [];
-			  	foreach (MarkninjaEstate::$searchKeys as $key) {
-			  		if(isset($_REQUEST[$key]) && $_REQUEST[$key]) {
-			  			$search_params[$key] = $_REQUEST[$key];
-			  		}
-			  	}
+			  	$search_params = $_REQUEST;
+			  	$search_params = Markninja_Helper::make_data_safe($search_params);
+
+			  	// $search_params = [];
+			  	// foreach (MarkninjaEstate::$searchKeys as $key) {
+			  	// 	if(isset($_REQUEST[$key]) && $_REQUEST[$key]) {
+			  	// 		$search_params[$key] = $_REQUEST[$key];
+			  	// 	}
+			  	// }
+			  	// foreach (MarkninjaEstate::$otherKeys as $key) {
+			  	// 	if(isset($_REQUEST[$key]) && $_REQUEST[$key]) {
+			  	// 		$search_params[$key] = $_REQUEST[$key];
+			  	// 	}
+			  	// }
 			  ?>
 			  var mnj_search_params = <?php echo Markninja_Helper::json_encode($search_params); ?>;
 
@@ -334,4 +347,4 @@
 			</script>
 
 			<script src="https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/markerclusterer.js"></script>
-			<script async defer src="https://maps.googleapis.com/maps/api/js?key=<?php echo get_option('mnj_google_api_key');?>&libraries=places&callback=initMap"></script>
+			<script async defer src="https://maps.googleapis.com/maps/api/js?key=<?php echo get_option('mnj_google_api_key');?>&libraries=places,drawing&callback=initMap"></script>

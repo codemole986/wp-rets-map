@@ -20,6 +20,7 @@ class MarkninjaAPI {
 		"search"  => 'http://www.markninja.com/las/markninja-api/public/api/estate/search',
 		"list"  => 'http://www.markninja.com/las/markninja-api/public/api/estate/list',
 		"load"  => 'http://www.markninja.com/las/markninja-api/public/api/estate/load',
+		"meta"  => 'http://www.markninja.com/las/markninja-api/public/api/estate/meta',
 	];
 
 	// --- API Methods
@@ -30,29 +31,31 @@ class MarkninjaAPI {
 		$this->debug = $debug;
 	}
 
+	private function loadAPI($key, $params=array()) {
+		$url = $this->getUrl($key, $params);
+		return json_decode($this->curl($url), true);
+	}
+
+	public function meta($params=array()) {
+		return $this->loadAPI('meta');
+	}
+
 	// get provides access to any Quandl API endpoint. There is no need
 	// to include the format.
 	public function search($params=array()) {
-		$url = $this->getUrl("search", $params);
-
-		return json_decode($this->curl($url), true);
+		return $this->loadAPI('search', $params);
 	}
 
 	public function getList($params=array()) {
-		$url = $this->getUrl("list", $params);
-		return json_decode($this->curl($url), true);
+		return $this->loadAPI('list', $params);
 	}
 
 	public function lookup($params=array()) {
-		$url = $this->getUrl("lookup", $params);
-
-		return json_decode($this->curl($url), true);
+		return $this->loadAPI('lookup', $params);
 	}
 
 	public function load($params=array()) {
-		$url = $this->getUrl("load", $params);
-
-		return json_decode($this->curl($url), true);
+		return $this->loadAPI('load', $params);
 	}
 
 	// getUrl receives a kind that points to a URL template and 
