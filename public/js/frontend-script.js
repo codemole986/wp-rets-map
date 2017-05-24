@@ -706,8 +706,8 @@ var mnj_map = {
       if(values && values['parcel']) value[0] = values['parcel'];
       if(values && values['by_radius']) value[1] = values['by_radius'];
       if(values && values['rad']) value[2] = values['rad'];
-      inner = '<div class="input-group input-group-sm"><span class="input-group-addon">' + label + '</span><input class="form-control not-empty" name="parcel" placeholder="' + label + '" value="' + value[0] + '"></div>';
-      inner += '<div class="input-group input-group-sm"><span class="input-group-addon"><input type="checkbox" name="by_radius" ' + (value[1]?"checked":'') + '>By Neibour or Radius of </span><input class="form-control"  name="rad" placeholder="Radius" value="' + value[2] + '"><span class="input-group-addon">mile</span></div>';
+      inner = '<div class="input-group input-group-sm"><span class="input-group-addon">' + label + '</span><input type="text" class="form-control not-empty" name="parcel" placeholder="' + label + '" value="' + value[0] + '"></div>';
+      inner += '<div class="input-group input-group-sm"><span class="input-group-addon"><input type="checkbox" name="by_radius" ' + (value[1]?"checked":'') + '>By Neibour or Radius of </span><input type="text" class="form-control"  name="rad" placeholder="Radius" value="' + value[2] + '"><span class="input-group-addon">mile</span></div>';
     } else if (type == 'address') {
       var label = 'Address';
       value[4] = '1';
@@ -717,11 +717,11 @@ var mnj_map = {
       if(values && values['by_radius_addr']) value[3] = values['by_radius_addr'];
       if(values && values['rad_addr']) value[4] = values['rad_addr'];
 
-      inner = '<div class="input-group input-group-sm"><span class="input-group-addon">' + label + '</span><input class="form-control not-empty"  name="addr" placeholder="' + label + '" value="' + value[0] + '"></div>';
+      inner = '<div class="input-group input-group-sm"><span class="input-group-addon">' + label + '</span><input type="text" class="form-control not-empty"  name="addr" placeholder="' + label + '" value="' + value[0] + '"></div>';
       inner += '<div class="">';
-      inner += '<div class="input-group input-group-sm" style="display: none;"><span class="input-group-addon">Lat</span><input class="form-control not-empty"  name="lat" placeholder="Latitude" value="' + value[1] + '"></div>';
-      inner += '<div class="input-group input-group-sm" style="display: none;"><span class="input-group-addon">Lng</span><input class="form-control not-empty"  name="lng" placeholder="Longitude" value="' + value[2] + '"></div>';
-      inner += '<div class="input-group input-group-sm"><span class="input-group-addon"><input type="checkbox" name="by_radius_addr" ' + (value[3]?"checked":'') + '>By Radius of </span><input class="form-control"  name="rad_addr" placeholder="Radius" value="' + value[4] + '"><span class="input-group-addon">mile</span></div>';
+      inner += '<div class="input-group input-group-sm" style="display: none;"><span class="input-group-addon">Lat</span><input type="text" class="form-control not-empty"  name="lat" placeholder="Latitude" value="' + value[1] + '"></div>';
+      inner += '<div class="input-group input-group-sm" style="display: none;"><span class="input-group-addon">Lng</span><input type="text" class="form-control not-empty"  name="lng" placeholder="Longitude" value="' + value[2] + '"></div>';
+      inner += '<div class="input-group input-group-sm"><span class="input-group-addon"><input type="checkbox" name="by_radius_addr" ' + (value[3]?"checked":'') + '>By Radius of </span><input type="text" class="form-control"  name="rad_addr" placeholder="Radius" value="' + value[4] + '"><span class="input-group-addon">mile</span></div>';
       inner += '</div>';
     } else if (type == 'status') {
       var label = 'Status';
@@ -747,9 +747,9 @@ var mnj_map = {
       if(values && values['lng']) value[1] = values['lng'];
       if(values && values['radius']) value[2] = values['radius'];
 
-      inner = '<div class="input-group input-group-sm"><span class="input-group-addon">Lat</span><input class="form-control not-empty"  name="lat" placeholder="Latitude" value="' + value[0] + '"></div>';
-      inner += '<div class="input-group input-group-sm"><span class="input-group-addon">Lng</span><input class="form-control not-empty"  name="lng" placeholder="Longitude" value="' + value[1] + '"></div>';
-      inner += '<div class="input-group input-group-sm"><span class="input-group-addon">Radius</span><input class="form-control not-empty"  name="radius" placeholder="Radius" value="' + value[2] + '"><span class="input-group-addon">mile</span></div>';
+      inner = '<div class="input-group input-group-sm"><span class="input-group-addon">Lat</span><input type="text" class="form-control not-empty"  name="lat" placeholder="Latitude" value="' + value[0] + '"></div>';
+      inner += '<div class="input-group input-group-sm"><span class="input-group-addon">Lng</span><input type="text" class="form-control not-empty"  name="lng" placeholder="Longitude" value="' + value[1] + '"></div>';
+      inner += '<div class="input-group input-group-sm"><span class="input-group-addon">Radius</span><input type="text" class="form-control not-empty"  name="radius" placeholder="Radius" value="' + value[2] + '"><span class="input-group-addon">mile</span></div>';
     } else if (type == 'custom') {
       inner = jQuery('#mnj_custom_fields_model').html();
     }

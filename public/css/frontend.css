@@ -438,14 +438,14 @@
     top: 60px;
     /*border-left: solid 1px #aaa;*/
 }
-
+#neibour_estates_wrapper {height: 680px; overflow: auto;}
 #mnj-map-static-page #neibour_estates_wrapper {
     position: absolute;
     border: 0px;
     top: 100px; /* 150px; */
-    overflow: auto;
     bottom: 0;
     width: 100%;
+    height: auto;
 }
 
 #neibour_estates_nav {}

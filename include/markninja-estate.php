@@ -1,7 +1,9 @@
 <?php
 
-// error_reporting(E_ALL);
-// ini_set('display_errors', 1);
+/**
+ * Markninja Estate plugin Core class file
+ * Author: Wilson Breiner
+ */
 
 require_once(dirname(__FILE__) . '/markninja-helper.php');
 require_once(dirname(__FILE__) . '/markninja-api.php');

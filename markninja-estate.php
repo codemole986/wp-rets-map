@@ -4,7 +4,7 @@
  * Plugin Name: Markninja Estate
  * Plugin URI: 
  * Description: This plugin supports Estate search on map using Markninja API.
- * Version: 1.0.0
+ * Version: 1.1
  * Author: Wilson Breiner
  * Author URI: 
  * License: GPL2
