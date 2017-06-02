@@ -4,6 +4,23 @@
 if ( !class_exists( 'MPH_Helper' ) ) {
     class MPH_Helper {
 
+        public static function replace_ticker($content, $ticker)
+        {
+             $look_for = " ticker=";
+             $tickers = array();
+
+             $ps = explode($look_for, $content);
+             for ($i=1; $i<count($ps); $i++) {
+                $ts = preg_split("/[\s,-,\]]+/", $ps[$i]);
+                if ($ts[0] != '') {
+                    $tickers[] = $look_for . $ts[0];
+                }
+             }
+
+             $newCont = str_replace($tickers, $look_for . $ticker, $content);
+             return $newCont;
+        }
+
         public static function find_valid_filename($dir, $fname)
         {
             $parts = explode(".", $fname);
@@ -75,6 +92,7 @@ if ( !class_exists( 'MPH_Helper' ) ) {
             if (function_exists('mb_convert_encoding')) {
                 return mb_convert_encoding($str, 'utf-8', 'utf-8');
             } else {
+                $str = iconv('ISO-8859-1','UTF-8', $str);
                 return $str;
             }
         }

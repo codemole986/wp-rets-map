@@ -149,17 +149,19 @@ class MPH_Center {
 
     public function publish_to_others_proceed($post, $postURL = '', $mph_center_messages = array()) {
 
+        $passed = false;
         $data = MPH_Helper::make_data_safe($_REQUEST);
 
         $api = new MPH_API();
         $publishedTo = array();
 
         if (isset($data['publish_web'])) {
+
             foreach ($data['publish_web'] as $key => $value) {
                 $sendPost = array(
-                    'post_title' => $post['post_title'],
-                    'post_content' => $post['post_content'],
-                    'post_excerpt' => $post['post_excerpt'],
+                    'post_title' => addslashes($post['post_title']),
+                    'post_content' => addslashes($post['post_content']),
+                    'post_excerpt' => addslashes($post['post_excerpt']),
                     'post_status' => 'publish', //$post['post_status'],
                 );
                 if (isset($data['publish_web_cats'][$key])) {
@@ -272,6 +274,8 @@ class MPH_Center {
             'msg' => $mph_center_messages,
             'info' => $publishedTo,
         );
+
+        return $result;
     }
 
     public function render_publish_proceed_outside($tickers, $titles, $tpls) {
@@ -286,10 +290,11 @@ class MPH_Center {
             $titleInd = rand(0, count($titles) - 1);
             $tplInd = rand(0, count($tpls) - 1);
 
-            $tpl = nl2br(Intrinio_Helper::make_string_safe(file_get_contents($tpls[$tplInd][1])));
+            $tpl = MPH_Helper::make_string_safe(file_get_contents($tpls[$tplInd][1]));
+            $tpl = wpautop(str_replace(["\r\n","\n"], "\r\n\r\n", $tpl));
 
-            $cont = Intrinio_Helper::replace_ticker($tpl, $ticker);
-            $title = Intrinio_Helper::replace_ticker($titles[$titleInd], $ticker);
+            $cont = MPH_Helper::replace_ticker($tpl, $ticker);
+            $title = MPH_Helper::replace_ticker($titles[$titleInd], $ticker);
 
             $post = array(
                 'post_title' => $title,
@@ -346,8 +351,9 @@ class MPH_Center {
 
         update_post_meta($post->ID, '_mph-center-published', MPH_Helper::json_encode($published_info));
         */
-        
-        wp_delete_post( $post->ID, true );
+        if (isset($data['publish_web'])) {
+            wp_delete_post( $post->ID, true );
+        }
     }
 
     public function render_post_edit_page() {
