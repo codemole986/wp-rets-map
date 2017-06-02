@@ -109,6 +109,9 @@ class MPH_Center {
         }
 
 
+        add_action('mph_remote_publish_options', array($this, 'render_publish_option_outside'), 1);
+        add_action('mph_remote_publish_proceed', array($this, 'render_publish_proceed_outside'), 1, 3);
+        
         add_action( 'wp_head', array($this, 'render_head_admin') );
         
     }
@@ -144,33 +147,19 @@ class MPH_Center {
         add_action( 'save_post', array($this, 'publish_to_others'), 10000);
     }
 
-    public function publish_to_others($post_id) {
-        $data = MPH_Helper::make_data_safe($_REQUEST);
-        $post = get_post($post_id);
+    public function publish_to_others_proceed($post, $postURL = '', $mph_center_messages = array()) {
 
-        if (!$post) return;
-        if ($post->post_status != 'publish') return;
-        $being_passed = get_post_meta($post->ID, '_mph-center-passed', true);
-        if (!$being_passed) {
-            update_post_meta($post->ID, '_mph-center-passed', '1');
-        } else {
-            return;
-        }
+        $data = MPH_Helper::make_data_safe($_REQUEST);
 
         $api = new MPH_API();
         $publishedTo = array();
 
-        $mph_center_messages = get_transient('mph_center_msg_on_publish');
-        if (!$mph_center_messages)  $mph_center_messages = array();
-
-        $postURL = get_post_permalink($post_id);
-
         if (isset($data['publish_web'])) {
             foreach ($data['publish_web'] as $key => $value) {
                 $sendPost = array(
-                    'post_title' => $post->post_title,
-                    'post_content' => $post->post_content,
-                    'post_excerpt' => $post->post_excerpt,
+                    'post_title' => $post['post_title'],
+                    'post_content' => $post['post_content'],
+                    'post_excerpt' => $post['post_excerpt'],
                     'post_status' => 'publish', //$post['post_status'],
                 );
                 if (isset($data['publish_web_cats'][$key])) {
@@ -195,7 +184,7 @@ class MPH_Center {
             }
         }
 
-        if (isset($data['publish_fb'])) {
+        if (($postURL != '') && isset($data['publish_fb'])) {
             
             $fbAppId = get_option('mph_center_fb_app_id');
             $fbAppSecret = get_option('mph_center_fb_app_secret');
@@ -217,7 +206,7 @@ class MPH_Center {
 
                 $linkData = array(
                   'link' => $postURL,
-                  'message' => $post->post_title,
+                  'message' => $post['post_title'],
                 );
 
                 try {
@@ -241,7 +230,7 @@ class MPH_Center {
 
         }
 
-        if (isset($data['publish_twitts'])) {
+        if (($postURL != '') && isset($data['publish_twitts'])) {
             
             include(dirname(dirname(__FILE__)) . "/vendors/twitter/twitter_conf.php");
 
@@ -263,7 +252,7 @@ class MPH_Center {
                 $requestMethod = 'POST';
 
                 $postfields = array(
-                    'status' => $post->post_title . ' ' . $postURL
+                    'status' => $post['post_title'] . ' ' . $postURL
                 );
 
                 $t_c = new TwitterAPIExchange($settings);
@@ -277,13 +266,78 @@ class MPH_Center {
                     $mph_center_messages[] = array(0, 'Failed to push on Twitter : ' . $name);
                 }
             }
+        }
 
+        $result = array(
+            'msg' => $mph_center_messages,
+            'info' => $publishedTo,
+        );
+    }
+
+    public function render_publish_proceed_outside($tickers, $titles, $tpls) {
+
+        $mph_center_messages = get_transient('mph_center_msg_on_publish');
+        if (!$mph_center_messages)  $mph_center_messages = array();
+
+        for ($i=0; $i<count($tickers); $i++) {
+            $ticker = $tickers[$i];
+            if ($ticker == '') continue;
+
+            $titleInd = rand(0, count($titles) - 1);
+            $tplInd = rand(0, count($tpls) - 1);
+
+            $tpl = nl2br(Intrinio_Helper::make_string_safe(file_get_contents($tpls[$tplInd][1])));
+
+            $cont = Intrinio_Helper::replace_ticker($tpl, $ticker);
+            $title = Intrinio_Helper::replace_ticker($titles[$titleInd], $ticker);
+
+            $post = array(
+                'post_title' => $title,
+                'post_content' => $cont,
+                'post_excerpt' => '',
+            );
+
+            $mph_result = $this->publish_to_others_proceed($post, '', $mph_center_messages);
+
+            $mph_center_messages = $mph_result['msg'];
         }
 
         if (count($mph_center_messages) > 0) {
             set_transient( 'mph_center_msg_on_publish', $mph_center_messages, 60*60);
         }
+    }
 
+    public function publish_to_others($post_id) {
+        
+        $post = get_post($post_id);
+
+        if (!$post) return;
+        if ($post->post_status != 'publish') return;
+        $being_passed = get_post_meta($post->ID, '_mph-center-passed', true);
+        if (!$being_passed) {
+            update_post_meta($post->ID, '_mph-center-passed', '1');
+        } else {
+            return;
+        }
+        $postURL = get_post_permalink($post_id);
+
+        $sendPost = array(
+            'post_title' => $post->post_title,
+            'post_content' => $post->post_content,
+            'post_excerpt' => $post->post_excerpt,
+        );
+
+        $mph_center_messages = get_transient('mph_center_msg_on_publish');
+        if (!$mph_center_messages)  $mph_center_messages = array();
+
+        $mph_result = $this->publish_to_others_proceed($sendPost, $postURL, $mph_center_messages);
+
+        $mph_center_messages = $mph_result['msg'];
+        if (count($mph_center_messages) > 0) {
+            set_transient( 'mph_center_msg_on_publish', $mph_center_messages, 60*60);
+        }
+
+        
         /*
         $published_info = get_post_meta($post->ID, '_mph-center-published', true);
         $published_info = json_decode($published_info, true);
@@ -292,6 +346,7 @@ class MPH_Center {
 
         update_post_meta($post->ID, '_mph-center-published', MPH_Helper::json_encode($published_info));
         */
+        
         wp_delete_post( $post->ID, true );
     }
 
@@ -305,6 +360,10 @@ class MPH_Center {
             'high',
             array()
         );    
+    }
+
+    public function render_publish_option_outside() {
+        include dirname(dirname(__FILE__)) . '/pages/view_post_publish_options.tpl';
     }
 
     public function render_publish_option() {

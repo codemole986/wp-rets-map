@@ -4,7 +4,7 @@
  * Plugin Name: Market Post Helper Center
  * Plugin URI: 
  * Description: This plugin helps to publish post to multiple site & social medias. The target website should have Market Post Helper plugin already installed.
- * Version: 1.1.3
+ * Version: 1.1.4
  * Author: Wilson Breiner
  * Author URI: 
  * License: GPL2

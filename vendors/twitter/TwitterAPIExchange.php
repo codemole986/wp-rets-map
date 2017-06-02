@@ -1,18 +1,4 @@
 <?php
-/** Security checked 2015-07-20 by Kelton **/
-
-if (!defined('TWITTER_CONSUMER_KEY')) {
-    define('TWITTER_CONSUMER_KEY', 'cNQHFLpZTeAyccMF5p58SQ');
-}
-
-if (!defined('TWITTER_CONSUMER_KEY')) {
-    define('TWITTER_CONSUMER_SECRET', 'yYO0d1La1gqtPMLIDgsIKJKnoC61jILxEdg4F5Krro');
-}
-
-if (!defined('TWITTER_OAUTH_CALLBACK')) {
-    define('TWITTER_OAUTH_CALLBACK', 'http://www.mobilefoodprinter.com/twitter.php');
-}
-
 /**
  * Twitter-API-PHP : Simple PHP wrapper for the v1.1 API
  *
@@ -232,8 +218,7 @@ class TwitterAPIExchange
 			throw new Exception('Server error');
 		}
         $payload = @json_decode($json); // intentionally @
-        if($payload->error != "") {
-            print_r($payload->error);
+        if($payload && isset($payload->error) && $payload->error != "") {
             throw new Exception('Error');
         }
 
